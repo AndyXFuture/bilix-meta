@@ -163,7 +163,11 @@ def print_help():
     )
     table.add_row(
         "-tr --time-range", '[dark_cyan]str',
-        r'下载视频的时间范围，格式如 h:m:s-h:m:s 或 s-s，默认无，仅get_video时生效',
+        '下载视频的时间范围，格式如 h:m:s-h:m:s 或 s-s，默认无，仅get_video时生效',
+    )
+    table.add_row(
+        "--meta", '',
+        '下载视频元数据'
     )
     table.add_row("-h --help", '', "帮助信息")
     table.add_row("-v --version", '', "版本信息")
@@ -359,6 +363,12 @@ class BasedTimeRange(click.ParamType):
     is_eager=True,
     expose_value=False,
     callback=handle_debug,
+)
+@click.option(
+    '--meta',
+    'meta',
+    is_flag=True,
+    default=False,
 )
 def main(**kwargs):
     loop = asyncio.new_event_loop()  # avoid deprecated warning in 3.11

@@ -82,7 +82,8 @@ class DownloaderBilibili(BaseDownloaderPart):
         raise ValueError(f'{url} no match for bilibili')
 
     async def get_collect_or_list(self, url, path=Path('.'),
-                                  quality=0, image=False, subtitle=False, dm=False, only_audio=False, codec: str = ''):
+                                  quality=0, image=False, subtitle=False, dm=False, only_audio=False,
+                                  codec: str = '', meta=False):
         """
         下载合集或视频列表
         :cli: short: col
@@ -93,7 +94,8 @@ class DownloaderBilibili(BaseDownloaderPart):
         :param subtitle:
         :param dm:
         :param only_audio:
-        :param codec:
+        :param codec:视频编码
+        :param meta: 是否保存meta信息
         :return:
         """
         if 'series' in url:
@@ -108,13 +110,13 @@ class DownloaderBilibili(BaseDownloaderPart):
             path /= name
             path.mkdir(parents=True, exist_ok=True)
         await asyncio.gather(
-            *[self.get_series(f"https://www.bilibili.com/video/{i}", path=path, quality=quality, codec=codec,
+            *[self.get_series(f"https://www.bilibili.com/video/{i}", path=path, quality=quality, codec=codec, meta=meta,
                               image=image, subtitle=subtitle, dm=dm, only_audio=only_audio)
               for i in bvids])
 
     async def get_favour(self, url_or_fid, path=Path('.'),
                          num=20, keyword='', quality=0, series=True, image=False, subtitle=False,
-                         dm=False, only_audio=False, codec: str = ''):
+                         dm=False, only_audio=False, codec: str = '', meta=False):
         """
         下载收藏夹内的视频
         :cli: short: fav
@@ -128,7 +130,8 @@ class DownloaderBilibili(BaseDownloaderPart):
         :param subtitle: 是否下载字幕
         :param dm: 是否下载弹幕
         :param only_audio: 是否仅下载音频
-        :param codec:
+        :param codec:视频编码
+        :param meta: 是否保存meta信息
         :return:
         """
         fav_name, up_name, total_size, bvids = await api.get_favour_page_info(self.client, url_or_fid, keyword=keyword)
@@ -146,11 +149,11 @@ class DownloaderBilibili(BaseDownloaderPart):
             else:
                 num = ps
             cors.append(self._get_favor_by_page(
-                url_or_fid, path, i + 1, num, keyword, quality, series, image, subtitle, dm, only_audio, codec=codec))
+                url_or_fid, path, i + 1, num, keyword, quality, series, image, subtitle, dm, only_audio, codec=codec, meta=meta))
         await asyncio.gather(*cors)
 
     async def _get_favor_by_page(self, url_or_fid, path: Path, pn=1, num=20, keyword='', quality=0,
-                                 series=True, image=False, subtitle=False, dm=False, only_audio=False, codec=''):
+                                 series=True, image=False, subtitle=False, dm=False, only_audio=False, codec='', meta=False):
         ps = 20
         num = min(ps, num)
         _, _, _, bvids = await api.get_favour_page_info(self.client, url_or_fid, pn, ps, keyword)
@@ -158,7 +161,7 @@ class DownloaderBilibili(BaseDownloaderPart):
         for i in bvids[:num]:
             func = self.get_series if series else self.get_video
             # noinspection PyArgumentList
-            cors.append(func(f'https://www.bilibili.com/video/{i}', path=path, quality=quality, codec=codec,
+            cors.append(func(f'https://www.bilibili.com/video/{i}', path=path, quality=quality, codec=codec, meta=meta,
                              image=image, subtitle=subtitle, dm=dm, only_audio=only_audio))
         await asyncio.gather(*cors)
 
@@ -172,7 +175,7 @@ class DownloaderBilibili(BaseDownloaderPart):
         return self._cate_meta
 
     async def get_cate(self, cate_name: str, path=Path('.'), num=10, order='click', keyword='', days=7,
-                       quality=0, series=True, image=False, subtitle=False, dm=False, only_audio=False, codec='', ):
+                       quality=0, series=True, image=False, subtitle=False, dm=False, only_audio=False, codec='', meta=False):
         """
         下载分区视频
         :cli: short: cate
@@ -188,7 +191,8 @@ class DownloaderBilibili(BaseDownloaderPart):
         :param subtitle: 是否下载字幕
         :param dm: 是否下载弹幕
         :param only_audio: 是否仅下载音频
-        :param codec:
+        :param codec:视频编码
+        :param meta: 是否保存meta信息
         :return:
         """
         cate_meta = await self.cate_meta
@@ -210,7 +214,7 @@ class DownloaderBilibili(BaseDownloaderPart):
         while num > 0:
             cors.append(self._get_cate_by_page(
                 cate_id, path, time_from, time_to, page, min(pagesize, num), order, keyword, quality,
-                series, image=image, subtitle=subtitle, dm=dm, only_audio=only_audio, codec=codec))
+                series, image=image, subtitle=subtitle, dm=dm, only_audio=only_audio, codec=codec, meta=meta))
             num -= pagesize
             page += 1
         await asyncio.gather(*cors)
@@ -222,14 +226,14 @@ class DownloaderBilibili(BaseDownloaderPart):
         bvids = bvids[:num]
         func = self.get_series if series else self.get_video
         # noinspection PyArgumentList
-        cors = [func(f"https://www.bilibili.com/video/{i}", path=path, quality=quality, codec=codec,
+        cors = [func(f"https://www.bilibili.com/video/{i}", path=path, quality=quality, codec=codec, meta=meta,
                      image=image, subtitle=subtitle, dm=dm, only_audio=only_audio)
                 for i in bvids]
         await asyncio.gather(*cors)
 
     async def get_up(
             self, url_or_mid: str, path=Path('.'), num=10, order='pubdate', keyword='', quality=0,
-            series=True, image=False, subtitle=False, dm=False, only_audio=False, codec='', ):
+            series=True, image=False, subtitle=False, dm=False, only_audio=False, codec='', meta=False):
         """
         下载up主视频
         :cli: short: up
@@ -244,7 +248,8 @@ class DownloaderBilibili(BaseDownloaderPart):
         :param subtitle: 是否下载字幕
         :param dm: 是否下载弹幕
         :param only_audio: 是否仅下载音频
-        :param codec:
+        :param codec:视频编码
+        :param meta: 是否保存meta信息
         :return:
         """
         ps = 30
@@ -262,11 +267,11 @@ class DownloaderBilibili(BaseDownloaderPart):
                 p_num = ps
             cors.append(self._get_up_by_page(
                 url_or_mid, path, i + 1, p_num, order, keyword, quality, series, image=image,
-                subtitle=subtitle, dm=dm, only_audio=only_audio, codec=codec))
+                subtitle=subtitle, dm=dm, only_audio=only_audio, codec=codec, meta=meta))
         await asyncio.gather(*cors)
 
     async def _get_up_by_page(self, url_or_mid, path: Path, pn=1, num=30, order='pubdate', keyword='', quality=0,
-                              series=True, image=False, subtitle=False, dm=False, only_audio=False, codec='', ):
+                              series=True, image=False, subtitle=False, dm=False, only_audio=False, codec='', meta=False):
         ps = 30
         num = min(ps, num)
         _, _, bvids = await api.get_up_video_info(self.client, url_or_mid, pn, ps, order, keyword)
@@ -274,12 +279,12 @@ class DownloaderBilibili(BaseDownloaderPart):
         func = self.get_series if series else self.get_video
         # noinspection PyArgumentList
         await asyncio.gather(
-            *[func(f'https://www.bilibili.com/video/{bv}', path=path, quality=quality, codec=codec,
+            *[func(f'https://www.bilibili.com/video/{bv}', path=path, quality=quality, codec=codec, meta=meta,
                    image=image, subtitle=subtitle, dm=dm, only_audio=only_audio) for bv in bvids])
 
     async def get_series(self, url: str, path=Path('.'),
                          quality: Union[str, int] = 0, image=False, subtitle=False,
-                         dm=False, only_audio=False, p_range: Sequence[int] = None, codec: str = ''):
+                         dm=False, only_audio=False, p_range: Sequence[int] = None, codec: str = '', meta=False):
         """
         下载某个系列（包括up发布的多p投稿，动画，电视剧，电影等）的所有视频。只有一个视频的情况下仍然可用该方法
         :cli: short: s
@@ -292,6 +297,7 @@ class DownloaderBilibili(BaseDownloaderPart):
         :param only_audio: 是否仅下载音频
         :param p_range: 下载集数范围，例如(1, 3)：P1至P3
         :param codec: 视频编码（可通过info获取）
+        :param meta: 是否保存meta信息
         :return:
         """
         try:
@@ -304,7 +310,7 @@ class DownloaderBilibili(BaseDownloaderPart):
             path.mkdir(parents=True, exist_ok=True)
         cors = [self.get_video(p.p_url, path=path,
                                quality=quality, image=image, subtitle=subtitle, dm=dm,
-                               only_audio=only_audio, codec=codec,
+                               only_audio=only_audio, codec=codec, meta=meta,
                                video_info=video_info if idx == video_info.p else None)
                 for idx, p in enumerate(video_info.pages)]
         if p_range:
@@ -313,7 +319,7 @@ class DownloaderBilibili(BaseDownloaderPart):
 
     async def get_video(self, url: str, path=Path('.'),
                         quality: Union[str, int] = 0, image=False, subtitle=False, dm=False, only_audio=False,
-                        codec: str = '', time_range: Tuple[int, int] = None, video_info: api.VideoInfo = None):
+                        codec: str = '', meta=False, time_range: Tuple[int, int] = None, video_info: api.VideoInfo = None):
         """
         下载单个视频
         :cli: short: v
@@ -325,6 +331,7 @@ class DownloaderBilibili(BaseDownloaderPart):
         :param dm: 是否下载弹幕
         :param only_audio: 是否仅下载音频
         :param codec: 视频编码（可通过codec获取）
+        :param meta: 是否保存meta信息
         :param time_range: 切片的时间范围
         :param video_info: 额外数据，提供时不用再次请求页面
         :return:
@@ -335,12 +342,14 @@ class DownloaderBilibili(BaseDownloaderPart):
                     video_info = await api.get_video_info(self.client, url)
                 except (APIResourceError, APIUnsupportedError) as e:
                     return self.logger.warning(e)
+            # print( video_info )
             p_name = legal_title(video_info.pages[video_info.p].p_name)
             task_name = legal_title(video_info.title, p_name)
             # if title is too long, use p_name as base_name
             base_name = p_name if len(video_info.title) > self.title_overflow and self.hierarchy and p_name else \
                 task_name
             media_name = base_name if not time_range else legal_title(base_name, *map(t2s, time_range))
+            bv_id = legal_title(video_info.bvid, p_name)
             media_cors = []
             task_id = await self.progress.add_task(total=None, description=task_name)
             if video_info.dash:
@@ -350,23 +359,25 @@ class DownloaderBilibili(BaseDownloaderPart):
                     self.logger.warning(
                         f"{task_name} 清晰度<{quality}> 编码<{codec}>不可用，请检查输入是否正确或是否需要大会员")
                 else:
+                    path = path / f'{media_name}'          # 每个视频单独文件夹存放
+                    path.mkdir(exist_ok=True)
                     tmp: List[Tuple[api.Media, Path]] = []
                     # 1. only video
                     if not audio and not only_audio:
-                        tmp.append((video, path / f'{media_name}.mp4'))
+                        tmp.append((video, path / f'{bv_id}.mp4'))
                     # 2. video and audio
                     elif audio and not only_audio:
-                        exists, media_path = path_check(path / f'{media_name}.mp4')
+                        exists, media_path = path_check(path / f'{bv_id}.mp4')
                         if exists:
                             self.logger.info(f'[green]已存在[/green] {media_path.name}')
                         else:
-                            tmp.append((video, path / f'{media_name}-v'))
-                            tmp.append((audio, path / f'{media_name}-a'))
+                            tmp.append((video, path / f'{bv_id}-v'))
+                            tmp.append((audio, path / f'{bv_id}-a'))
                             # task need to be merged
                             await self.progress.update(task_id=task_id, upper=ffmpeg.combine)
                     # 3. only audio
                     elif audio and only_audio:
-                        tmp.append((audio, path / f'{media_name}{audio.suffix}'))
+                        tmp.append((audio, path / f'{bv_id}{audio.suffix}'))
                     else:
                         self.logger.warning(f"No audio for {task_name}")
                     # convert to coroutines
@@ -396,9 +407,9 @@ class DownloaderBilibili(BaseDownloaderPart):
                 if len(video_info.other) == 1:
                     m = video_info.other[0]
                     media_cors.append(
-                        self.get_file(m.urls, path=path / f'{media_name}.{m.suffix}', task_id=task_id))
+                        self.get_file(m.urls, path=path / f'{bv_id}.{m.suffix}', task_id=task_id))
                 else:
-                    exist, media_path = path_check(path / f'{media_name}.mp4')
+                    exist, media_path = path_check(path / f'{bv_id}.mp4')
                     if exist:
                         self.logger.info(f'[green]已存在[/green] {media_path.name}')
                     else:
@@ -409,7 +420,7 @@ class DownloaderBilibili(BaseDownloaderPart):
                                 return await self.get_file(media.urls, path=p, task_id=task_id)
 
                         for i, m in enumerate(video_info.other):
-                            f = f'{media_name}-{i}.{m.suffix}'
+                            f = f'{bv_id}-{i}.{m.suffix}'
                             media_cors.append(_get_file(m, path / f))
                         await self.progress.update(task_id=task_id, upper=ffmpeg.concat)
             else:
@@ -417,10 +428,10 @@ class DownloaderBilibili(BaseDownloaderPart):
             # additional task
             add_cors = []
             if image or subtitle or dm:
-                extra_path = path / "extra" if self.hierarchy else path
-                extra_path.mkdir(exist_ok=True)
+                extra_path = path
                 if image:
-                    add_cors.append(self.get_static(video_info.img_url, path=extra_path / base_name))
+                    add_cors.append(self.get_static(video_info.img_url, path=extra_path / f'{bv_id}-fanart')) # base_name))
+                    add_cors.append(self.get_static(video_info.img_url, path=extra_path / f'{bv_id}-poster')) # base_name))
                 if subtitle:
                     add_cors.append(self.get_subtitle(url, path=extra_path, video_info=video_info))
                 if dm:
@@ -430,6 +441,10 @@ class DownloaderBilibili(BaseDownloaderPart):
                         width, height = 1920, 1080
                     add_cors.append(self.get_dm(
                         url, path=extra_path, convert_func=self._dm2ass_factory(width, height), video_info=video_info))
+                if meta:
+                    with open(extra_path / f'{base_name}.json', 'w', encoding='utf-8') as f:
+                        f.write(video_info.model_dump_json(exclude={"dash", "other"}))
+                    self.logger.info(f'{base_name}.json')
             path_lst, _ = await asyncio.gather(asyncio.gather(*media_cors), asyncio.gather(*add_cors))
 
         if upper := self.progress.tasks[task_id].fields.get('upper', None):
@@ -464,10 +479,10 @@ class DownloaderBilibili(BaseDownloaderPart):
         file_type = '.' + ('pb' if not convert_func else convert_func.__name__.split('2')[-1])
         p_name = video_info.pages[video_info.p].p_name
         # to avoid file name too long bug
-        if len(video_info.title) > self.title_overflow and self.hierarchy and p_name:
-            file_name = legal_title(p_name, "弹幕") + file_type
-        else:
-            file_name = legal_title(video_info.title, p_name, "弹幕") + file_type
+        # if len(video_info.title) > self.title_overflow and self.hierarchy and p_name:
+        #     file_name = legal_title(p_name, "弹幕") + file_type
+        # else:
+        file_name = legal_title(video_info.bvid, p_name, "弹幕") + file_type
         file_path = path / file_name
         exist, file_path = path_check(file_path)
         if not update and exist:
@@ -506,14 +521,14 @@ class DownloaderBilibili(BaseDownloaderPart):
         cors = []
 
         for sub_url, sub_name in subtitles:
-            if len(video_info.title) > self.title_overflow and self.hierarchy and p_name:
-                file_name = legal_title(p_name, sub_name)
-            else:
-                file_name = legal_title(video_info.title, p_name, sub_name)
+            # if len(video_info.title) > self.title_overflow and self.hierarchy and p_name:
+            #     file_name = legal_title(p_name, sub_name)
+            # else:
+            file_name = legal_title(video_info.bvid, p_name, sub_name)
             cors.append(self.get_static(sub_url, path / file_name, convert_func=convert_func))
         paths = await asyncio.gather(*cors)
         return paths
-
+    
     @classmethod
     @auto_assemble
     def handle(cls, method: str, keys: Tuple[str, ...], options: dict):
