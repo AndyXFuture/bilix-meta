@@ -1,6 +1,8 @@
 import asyncio
 import functools
 import re
+import xml.etree.ElementTree as ET
+from datetime import datetime
 from pathlib import Path
 from typing import Union, Sequence, Tuple, List
 import aiofiles
@@ -14,6 +16,7 @@ from bilix.download.utils import req_retry, path_check
 from bilix.exception import HandleMethodError, APIUnsupportedError, APIResourceError, APIError
 from bilix.cli.assign import kwargs_filter, auto_assemble
 from bilix import ffmpeg
+
 
 from danmakuC.bilibili import proto2ass
 
@@ -233,7 +236,7 @@ class DownloaderBilibili(BaseDownloaderPart):
 
     async def get_up(
             self, url_or_mid: str, path=Path('.'), num=10, order='pubdate', keyword='', quality=0,
-            series=True, image=False, subtitle=False, dm=False, only_audio=False, codec='', meta=False):
+            series=True, image=False, subtitle=False, dm=False, only_audio=False, codec='', meta=False, update=False):
         """
         下载up主视频
         :cli: short: up
@@ -252,11 +255,32 @@ class DownloaderBilibili(BaseDownloaderPart):
         :param meta: 是否保存meta信息
         :return:
         """
+        up_info = await api.get_up_info(self.client, url_or_mid)
+        # print(up_info)
+        up_name = up_info.get('name', '')
+        print(up_name)
+        up_face_url = up_info.get('face', '')
+        print(up_face_url)
+        up_sign = up_info.get('sign', '')
+        print(up_sign)
+        up_uid = up_info.get('fans_medal').get('medal').get('uid', '')
+        print(up_uid)
+        # todo: 将演员信息存入专门的文件夹
+
         ps = 30
+        media_cors = []
+        add_cors = []
         up_name, total_size, bv_ids = await api.get_up_video_info(self.client, url_or_mid, 1, ps, order, keyword)
         if self.hierarchy:
             path /= legal_title(f"【up】{up_name}")
             path.mkdir(parents=True, exist_ok=True)
+        if meta:
+            exist, file_path = path_check(path / f'poster.jpg')
+            if not exist and update:
+                add_cors.append(self.get_static(up_face_url, path=path / f'poster')) # base_name))
+            else:
+                self.logger.info(f"[green]已存在[/green] {path / f'poster.jpg'}")
+        path_lst, _ = await asyncio.gather(asyncio.gather(*media_cors), asyncio.gather(*add_cors))
         num = min(total_size, num)
         page_nums = num // ps + min(1, num % ps)
         cors = []
@@ -274,7 +298,7 @@ class DownloaderBilibili(BaseDownloaderPart):
                               series=True, image=False, subtitle=False, dm=False, only_audio=False, codec='', meta=False):
         ps = 30
         num = min(ps, num)
-        _, _, bvids = await api.get_up_video_info(self.client, url_or_mid, pn, ps, order, keyword)
+        up_name, _, bvids = await api.get_up_video_info(self.client, url_or_mid, pn, ps, order, keyword)
         bvids = bvids[:num]
         func = self.get_series if series else self.get_video
         # noinspection PyArgumentList
@@ -308,6 +332,10 @@ class DownloaderBilibili(BaseDownloaderPart):
         if self.hierarchy and len(video_info.pages) > 1:
             path /= video_info.title
             path.mkdir(parents=True, exist_ok=True)
+            add_cors = []
+            media_cors = []
+            add_cors.append(self.get_static(video_info.img_url, path=path / f'poster')) # base_name))
+            path_lst, _ = await asyncio.gather(asyncio.gather(*media_cors), asyncio.gather(*add_cors))
         cors = [self.get_video(p.p_url, path=path,
                                quality=quality, image=image, subtitle=subtitle, dm=dm,
                                only_audio=only_audio, codec=codec, meta=meta,
@@ -427,11 +455,11 @@ class DownloaderBilibili(BaseDownloaderPart):
                 self.logger.warning(f'{task_name} 需要大会员或该地区不支持')
             # additional task
             add_cors = []
-            if image or subtitle or dm:
+            if image or subtitle or dm or meta:
                 extra_path = path
                 if image:
                     add_cors.append(self.get_static(video_info.img_url, path=extra_path / f'{bv_id}-fanart')) # base_name))
-                    add_cors.append(self.get_static(video_info.img_url, path=extra_path / f'{bv_id}-poster')) # base_name))
+                    add_cors.append(self.get_static(video_info.img_url, path=extra_path / f'{bv_id}-backdrop1')) # base_name))
                 if subtitle:
                     add_cors.append(self.get_subtitle(url, path=extra_path, video_info=video_info))
                 if dm:
@@ -442,9 +470,10 @@ class DownloaderBilibili(BaseDownloaderPart):
                     add_cors.append(self.get_dm(
                         url, path=extra_path, convert_func=self._dm2ass_factory(width, height), video_info=video_info))
                 if meta:
-                    with open(extra_path / f'{base_name}.json', 'w', encoding='utf-8') as f:
-                        f.write(video_info.model_dump_json(exclude={"dash", "other"}))
-                    self.logger.info(f'{base_name}.json')
+                    add_cors.append(self.get_meta_nfo(url, path=extra_path, video_info=video_info, bv_id=bv_id))
+                    # with open(extra_path / f'{bv_id}.json', 'w', encoding='utf-8') as f:
+                    #     f.write(video_info.model_dump_json(exclude={"dash", "other"}))
+                    # self.logger.info(f'{bv_id}.json')
             path_lst, _ = await asyncio.gather(asyncio.gather(*media_cors), asyncio.gather(*add_cors))
 
         if upper := self.progress.tasks[task_id].fields.get('upper', None):
@@ -482,7 +511,8 @@ class DownloaderBilibili(BaseDownloaderPart):
         # if len(video_info.title) > self.title_overflow and self.hierarchy and p_name:
         #     file_name = legal_title(p_name, "弹幕") + file_type
         # else:
-        file_name = legal_title(video_info.bvid, p_name, "弹幕") + file_type
+        # print(p_name)
+        file_name = legal_title(video_info.bvid, p_name, "弹幕.zh", join_str = ".") + file_type
         file_path = path / file_name
         exist, file_path = path_check(file_path)
         if not update and exist:
@@ -524,10 +554,109 @@ class DownloaderBilibili(BaseDownloaderPart):
             # if len(video_info.title) > self.title_overflow and self.hierarchy and p_name:
             #     file_name = legal_title(p_name, sub_name)
             # else:
-            file_name = legal_title(video_info.bvid, p_name, sub_name)
+            file_name = legal_title(video_info.bvid, p_name, sub_name, "zh", join_str = ".")
             cors.append(self.get_static(sub_url, path / file_name, convert_func=convert_func))
         paths = await asyncio.gather(*cors)
         return paths
+    
+    async def get_meta_nfo(self, url, path=Path('.'), video_info=None, bv_id=None, update=False):
+        """
+        提取生成nfo文件
+        :cli: short: sub
+        :param url: 视频url
+        :param path: 文件保存路径
+        :param video_info: 额外数据，提供则不再访问前端
+        :return:
+        """
+        if not video_info:
+            video_info = await api.get_video_info(self.client, url)
+            bv_id = legal_title(video_info.bvid)
+        p, cid = video_info.p, video_info.cid
+        p_name = video_info.pages[p].p_name
+
+        video_user_info = await api._get_video_info_from_api(self.client, url)
+        # print(video_user_info)
+        pubdate_timestamp = video_user_info.get('data').get('pubdate','0')
+        pubdate_date = datetime.fromtimestamp(pubdate_timestamp)
+        ctime_timestamp = video_user_info.get('data').get('ctime','0')
+        ctime_date = datetime.fromtimestamp(ctime_timestamp)
+        
+        root = ET.Element("movie")
+        ET.SubElement(root, "plot").text = video_info.desc
+        ET.SubElement(root, "title").text = legal_title(video_info.title, p_name)
+        ET.SubElement(root, "trailer").text = f"{url}"
+        ET.SubElement(root, "premiered").text = f'{pubdate_date.year}-{pubdate_date.month}-{pubdate_date.day}'
+        ET.SubElement(root, "releasedate").text = f'{ctime_date.year}-{ctime_date.month}-{ctime_date.day}'
+        ET.SubElement(root, "aired").text = f'{pubdate_date.year}-{pubdate_date.month}-{pubdate_date.day}'
+        # ET.SubElement(root, "year").text = f'{pubdate_date.year}'
+        ET.SubElement(root, "mpaa").text = "PG"
+        ET.SubElement(root, "customrating").text = "CN"
+        ET.SubElement(root, "country").text = "中国"
+        ET.SubElement(root, "runtime").text = f"{video_user_info.get('data').get('duration','')}秒"
+        ET.SubElement(root, "id").text = video_info.bvid
+        ET.SubElement(root, "num").text = video_info.bvid
+        ET.SubElement(root, "genre").text = video_user_info.get('data').get('tname','')
+        ET.SubElement(root, "studio").text = f"bilibili"
+
+        # 获取tag信息
+        tags = video_info.tags
+        tag = [None]*len(tags)
+        # print(video_info.tags)
+        for index, member in enumerate(tags):
+            # print(index)
+            # print(member)
+            tag[index] = ET.SubElement(root, "tag")
+            tag[index].text = f"{member}"
+        
+        # 获取演员信息
+        staff = video_user_info.get('data').get('staff','')
+        if staff == '':
+            owner = video_user_info.get('data').get('owner','')
+            actor = ET.SubElement(root, "actor")
+            ET.SubElement(actor, "name").text = f"{owner.get('name','')}"
+            ET.SubElement(actor, "mid").text = f"{owner.get('mid','')}"
+            ET.SubElement(actor, "type").text = f"UP主"
+            ET.SubElement(actor, "sortorder").text = f"0"
+            ET.SubElement(actor, "thumb").text = f"/nfo/People/{owner.get('name','')[:1]}/{owner.get('name','')}/folder.jpg"
+            # print(f"/nfo/People/{owner.get('name','')[:1]}/{owner.get('name','')}/folder.jpg")
+        else:
+            actor = [None]*len(staff)
+            for index, member in enumerate(staff):
+                # print(index)
+                # print(member)
+                actor[index] = ET.SubElement(root, "actor")
+                ET.SubElement(actor[index], "name").text = f"{member.get('name','')}"
+                ET.SubElement(actor[index], "mid").text = f"{member.get('mid','')}"
+                # 饰演 ET.SubElement(actor[index], "role").text = 
+                ET.SubElement(actor[index], "type").text = f"{member.get('title','')}"
+                ET.SubElement(actor[index], "sortorder").text = f"{index}"
+                ET.SubElement(actor[index], "thumb").text = f"/nfo/People/{member.get('name','')[:1]}/{member.get('name','')}/folder.jpg"
+                # print(f"/nfo/People/{member.get('name','')[:1]}/{member.get('name','')}/folder.jpg")
+                # todo: 检查演员文件夹是否有该UP主的信息
+                file_path = Path(f"./People/{member.get('name','')[:1]}/{member.get('name','')}")
+                file_path.mkdir(parents=True, exist_ok=True)
+                file_name = file_path / f"folder.jpg"
+                # print(file_name)
+                path1 = "."
+                exist, file_name = path_check(file_name)
+                if not update and exist:
+                    self.logger.info(f"[green]已存在[/green] {file_name}")
+                else:
+                    media_cors = []
+                    add_cors = []
+                    pic_url = member.get('face','')
+                    add_cors.append(self.get_static(pic_url, path=file_path / f"folder")) # base_name))
+                    path_lst, _ = await asyncio.gather(asyncio.gather(*media_cors), asyncio.gather(*add_cors))
+                    self.logger.info(f"[cyan]已完成[/cyan] {file_name}")
+        
+        # 存入nfo文件
+        tree = ET.ElementTree(root)
+        file_name = legal_title(bv_id, p_name)
+        file_path = path / f'{file_name}.nfo'
+        self.logger.info(f"[cyan]已完成[/cyan] {file_path}")
+        with open(file_path, 'w', encoding='utf-8') as f:
+            tree.write(file_path, encoding="utf-8", xml_declaration=True)
+        return file_path
     
     @classmethod
     @auto_assemble

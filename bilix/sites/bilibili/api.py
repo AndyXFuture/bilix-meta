@@ -193,6 +193,7 @@ async def get_up_video_info(client: httpx.AsyncClient, url_or_mid: str, pn=1, ps
 
     res = await req_retry(client, "https://api.bilibili.com/x/space/wbi/arc/search", params=params)
     info = json.loads(res.text)
+    # print(info)
     up_name = info["data"]["list"]["vlist"][0]["author"]
     total_size = info["data"]["page"]["count"]
     bv_ids = [i["bvid"] for i in info["data"]["list"]["vlist"]]
@@ -535,6 +536,14 @@ async def _get_video_basic_info_from_api(client: httpx.AsyncClient, url) -> Vide
                                  p=p, pages=pages, img_url=img_url, bvid=bvid, dash=None, other=None)
     return basic_video_info
 
+async def _get_video_info_from_api(client: httpx.AsyncClient, url) -> VideoInfo:
+    """通过 view api 获取视频的基本信息，不包括 dash 或 durl(other) 视频流资源"""
+    aid, bvid, selected_page_num = parse_ids_from_url(url)
+    params = {'bvid': bvid} if bvid else {'aid': aid}
+    r = await req_retry(client, 'https://api.bilibili.com/x/web-interface/view',
+                        params=params, follow_redirects=True)
+    raw_json = json.loads(r.text)
+    return raw_json
 
 @raise_api_error
 async def get_subtitle_info(client: httpx.AsyncClient, bvid, cid):
