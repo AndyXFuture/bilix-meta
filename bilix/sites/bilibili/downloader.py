@@ -610,12 +610,11 @@ class DownloaderBilibili(BaseDownloaderPart):
         p, cid = video_info.p, video_info.cid
         p_name = video_info.pages[p].p_name
 
-        file_name = legal_title(bv_id, p_name)
-        file_path = path / f'{file_name}.nfo'
-        exist, file_path = path_check(file_path)
+        exist_path = path / f'{legal_title(bv_id, p_name)}.nfo'
+        exist, exist_path = path_check(exist_path)
         if not update and exist:
-            self.logger.info(f"[green]已存在[/green] {file_name}")
-            return file_path
+            self.logger.info(f"[green]已存在[/green] {exist_path}")
+            return exist_path
         video_user_info = await api._get_video_info_from_api(self.client, url)
         # print(video_user_info)
         pubdate_timestamp = video_user_info.get('data').get('pubdate','0')
@@ -705,9 +704,12 @@ class DownloaderBilibili(BaseDownloaderPart):
                     add_cors.append(self.get_static(pic_url, path=file_path / f"folder")) # base_name))
                     path_lst, _ = await asyncio.gather(asyncio.gather(*media_cors), asyncio.gather(*add_cors))
                     self.logger.info(f"[cyan]已完成[/cyan] {file_name}")
+
         
         # 存入nfo文件
         tree = ET.ElementTree(root)
+        file_name = legal_title(bv_id, p_name)
+        file_path = path / f'{file_name}.nfo'
         with open(file_path, 'w', encoding='utf-8') as f:
             tree.write(file_path, encoding="utf-8", xml_declaration=True)
         self.logger.info(f"[cyan]已完成[/cyan] {file_path}")
