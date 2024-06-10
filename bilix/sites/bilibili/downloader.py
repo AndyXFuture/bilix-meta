@@ -278,9 +278,12 @@ class DownloaderBilibili(BaseDownloaderPart):
             exist, file_path = path_check(path / f'poster.jpg')
             if not exist and update:
                 add_cors.append(self.get_static(up_face_url, path=path / f'poster')) # base_name))
+                self.logger.info(f"[cyan]已完成[/cyan] {path / f'poster.jpg'}")
+                path_lst, _ = await asyncio.gather(asyncio.gather(*media_cors), asyncio.gather(*add_cors))
             else:
                 self.logger.info(f"[green]已存在[/green] {path / f'poster.jpg'}")
-        path_lst, _ = await asyncio.gather(asyncio.gather(*media_cors), asyncio.gather(*add_cors))
+        
+
         num = min(total_size, num)
         page_nums = num // ps + min(1, num % ps)
         cors = []
@@ -334,8 +337,14 @@ class DownloaderBilibili(BaseDownloaderPart):
             path.mkdir(parents=True, exist_ok=True)
             add_cors = []
             media_cors = []
-            add_cors.append(self.get_static(video_info.img_url, path=path / f'poster')) # base_name))
-            path_lst, _ = await asyncio.gather(asyncio.gather(*media_cors), asyncio.gather(*add_cors))
+            if meta:
+                exist, file_path = path_check(path / f'poster.jpg')
+                if not exist and update:
+                    add_cors.append(self.get_static(video_info.img_url, path=path / f'poster')) # base_name))
+                    path_lst, _ = await asyncio.gather(asyncio.gather(*media_cors), asyncio.gather(*add_cors))
+                    self.logger.info(f"[cyan]已完成[/cyan] {path / f'poster.jpg'}")
+                else:
+                    self.logger.info(f"[green]已存在[/green] {path / f'poster.jpg'}")
         cors = [self.get_video(p.p_url, path=path,
                                quality=quality, image=image, subtitle=subtitle, dm=dm,
                                only_audio=only_audio, codec=codec, meta=meta, update=update,
@@ -424,7 +433,7 @@ class DownloaderBilibili(BaseDownloaderPart):
                     elif audio and not only_audio:
                         exists, media_path = path_check(path / f'{bv_id}.mp4')
                         if exists:
-                            self.logger.info(f'[green]已存在[/green] {media_path.name}')
+                            self.logger.info(f'[green]已存在[/green] {media_path}') # {media_path.name}')
                         else:
                             tmp.append((video, path / f'{bv_id}-v'))
                             tmp.append((audio, path / f'{bv_id}-a'))
@@ -466,7 +475,7 @@ class DownloaderBilibili(BaseDownloaderPart):
                 else:
                     exist, media_path = path_check(path / f'{bv_id}.mp4')
                     if exist:
-                        self.logger.info(f'[green]已存在[/green] {media_path.name}')
+                        self.logger.info(f'[green]已存在[/green] {media_path}')# .name}')
                     else:
                         p_sema = asyncio.Semaphore(self.part_concurrency)
 
@@ -505,7 +514,7 @@ class DownloaderBilibili(BaseDownloaderPart):
 
         if upper := self.progress.tasks[task_id].fields.get('upper', None):
             await upper(path_lst, media_path)
-            self.logger.info(f'[cyan]已完成[/cyan] {media_path.name}')
+            self.logger.info(f'[cyan]已完成[/cyan] {media_path}')# .name}')
         await self.progress.update(task_id, visible=False)
 
     @staticmethod
@@ -601,6 +610,12 @@ class DownloaderBilibili(BaseDownloaderPart):
         p, cid = video_info.p, video_info.cid
         p_name = video_info.pages[p].p_name
 
+        file_name = legal_title(bv_id, p_name)
+        file_path = path / f'{file_name}.nfo'
+        exist, file_path = path_check(file_path)
+        if not update and exist:
+            self.logger.info(f"[green]已存在[/green] {file_name}")
+            return file_path
         video_user_info = await api._get_video_info_from_api(self.client, url)
         # print(video_user_info)
         pubdate_timestamp = video_user_info.get('data').get('pubdate','0')
@@ -693,11 +708,9 @@ class DownloaderBilibili(BaseDownloaderPart):
         
         # 存入nfo文件
         tree = ET.ElementTree(root)
-        file_name = legal_title(bv_id, p_name)
-        file_path = path / f'{file_name}.nfo'
-        self.logger.info(f"[cyan]已完成[/cyan] {file_path}")
         with open(file_path, 'w', encoding='utf-8') as f:
             tree.write(file_path, encoding="utf-8", xml_declaration=True)
+        self.logger.info(f"[cyan]已完成[/cyan] {file_path}")
         return file_path
     
     @classmethod
