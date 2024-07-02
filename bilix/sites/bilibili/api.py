@@ -110,8 +110,9 @@ async def get_favour_page_info(client: httpx.AsyncClient, url_or_fid: str, pn=1,
     data = json.loads(res.text)['data']
     fav_name, up_name = data['info']['title'], data['info']['upper']['name']
     bvids = [i['bvid'] for i in data['medias'] if i['title'] != '已失效视频']
+    bvnames = [i['title'] for i in data['medias'] if i['title'] != '已失效视频']
     total_size = data['info']['media_count']
-    return fav_name, up_name, total_size, bvids
+    return fav_name, up_name, total_size, bvids, bvnames
 
 
 @raise_api_error
@@ -197,7 +198,8 @@ async def get_up_video_info(client: httpx.AsyncClient, url_or_mid: str, pn=1, ps
     up_name = info["data"]["list"]["vlist"][0]["author"]
     total_size = info["data"]["page"]["count"]
     bv_ids = [i["bvid"] for i in info["data"]["list"]["vlist"]]
-    return up_name, total_size, bv_ids
+    bv_names = [i["title"] for i in info["data"]["list"]["vlist"]]
+    return up_name, total_size, bv_ids, bv_names
 
 
 async def get_up_info(client: httpx.AsyncClient, url_or_mid: str):
@@ -427,6 +429,7 @@ def _parse_ep_html(url, html: str) -> VideoInfo:
 
 @raise_api_error
 async def get_video_info(client: httpx.AsyncClient, url: str) -> VideoInfo:
+    print(f"get_vedio_info:{url}")
     try:
         # try to get video info from web front-end first
         return await _get_video_info_from_html(client, url)
